@@ -2,6 +2,7 @@ import os
 import ollama
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from pinecone import Pinecone
@@ -25,7 +26,17 @@ app = FastAPI(
 )
 
 # ----------------------------
-# Pinecone
+# CORS
+# ----------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)\
+# ----------------------------
+# Pinecone  
 # ----------------------------
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index = pc.Index(INDEX_NAME)
