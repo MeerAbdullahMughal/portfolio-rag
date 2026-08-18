@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meer Abdullah — AI Engineer | Deck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#05070d;
+  --stage:#0d111c;
+  --surface:#141a29;
+  --surface-2:#1a2136;
+  --border:rgba(255,255,255,0.09);
+  --text:#e9ecf6;
+  --text-dim:#9096ae;
+  --text-faint:#5b6280;
+  --cyan:#5eead4;
+  --violet:#a78bfa;
+  --coral:#ff8a65;
+  --font-display:'Space Grotesk', sans-serif;
+  --font-body:'Inter', sans-serif;
+  --font-mono:'JetBrains Mono', monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  background:radial-gradient(ellipse at 50% 0%, #10162a 0%, var(--bg) 65%);
+  color:var(--text);
+  font-family:var(--font-body);
+  cursor:none;
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+@media (max-width:900px){ body{cursor:auto; overflow:auto; height:auto;} }
+::selection{background:var(--cyan);color:var(--bg);}
+
+#neural-canvas{position:fixed;inset:0;z-index:0;opacity:0.5;}
+#trail-canvas{position:fixed;inset:0;z-index:5;pointer-events:none;}
+#cursorGlow{
+  position:fixed;top:0;left:0;width:420px;height:420px;border-radius:50%;
+  background:radial-gradient(circle, rgba(94,234,212,0.10) 0%, rgba(167,139,250,0.06) 45%, transparent 72%);
+  transform:translate(-50%,-50%); pointer-events:none; z-index:1; will-change:transform;
+}
+@media (max-width:900px){#cursorGlow,#trail-canvas{display:none;}}
+
+.cursor-dot,.cursor-ring{position:fixed;top:0;left:0;pointer-events:none;z-index:9999;border-radius:50%;transform:translate(-50%,-50%);will-change:transform;}
+.cursor-dot{width:7px;height:7px;background:var(--cyan);}
+.cursor-ring{width:38px;height:38px;border:1.5px solid rgba(94,234,212,0.55);transition:width .25s,height .25s,border-color .25s,background .25s;}
+.cursor-ring.active{width:64px;height:64px;background:rgba(167,139,250,0.1);border-color:var(--violet);}
+.cursor-ring.click{width:26px;height:26px;}
+@media (max-width:900px){.cursor-dot,.cursor-ring{display:none;}}
+
+/* ===== theatre chrome ===== */
+.brand{position:fixed;top:22px;left:28px;z-index:200;font-family:var(--font-display);font-weight:700;font-size:0.95rem;color:var(--text-dim);}... (truncated for brevity)
