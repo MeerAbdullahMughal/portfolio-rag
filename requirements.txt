@@ -30,6 +30,7 @@ ollama==0.6.2
 orjson==3.11.9
 packaging==26.3
 pinecone==9.1.0
+PyMuPDF==1.28.0
 pydantic==2.13.4
 pydantic_core==2.46.4
 Pygments==2.20.0

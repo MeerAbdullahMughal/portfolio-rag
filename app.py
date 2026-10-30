@@ -1,13 +1,16 @@
-import os
+from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, TypedDict
 
+import fitz
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel
-
-from pinecone import Pinecone
-from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 from langchain_ollama import ChatOllama
 from langchain_core.messages import (
@@ -25,10 +28,7 @@ from langgraph.checkpoint.memory import MemorySaver
 # Load Environment Variables
 # =========================================================
 
-load_dotenv()
-
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
+load_dotenv(Path(__file__).with_name(".env"))
 
 
 # =========================================================
@@ -41,6 +41,14 @@ app = FastAPI(
     version="2.0.0"
 )
 
+@app.get("/health")
+def health():
+    knowledge_file = Path(__file__).with_name("portfolio_knowledge.pdf")
+    return {
+        "status": "ok",
+        "chat_ready": knowledge_file.is_file() and knowledge_file.stat().st_size > 0,
+    }
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,31 +59,35 @@ app.add_middleware(
 )
 
 
-# =========================================================
-# Pinecone
-# =========================================================
+@lru_cache(maxsize=1)
+def get_chat_services():
+    knowledge_file = Path(__file__).with_name("portfolio_knowledge.pdf")
+    if not knowledge_file.is_file():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Portfolio knowledge file not found: {knowledge_file.name}",
+        )
 
-pc = Pinecone(api_key=PINECONE_API_KEY)
+    with fitz.open(knowledge_file) as document:
+        text = "\n".join(page.get_text() for page in document)
+    chunks = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=50,
+    ).split_text(text)
+    if not chunks:
+        raise HTTPException(
+            status_code=503,
+            detail=f"No searchable text found in {knowledge_file.name}",
+        )
 
-index = pc.Index(INDEX_NAME)
-
-
-# =========================================================
-# Embedding Model
-# =========================================================
-
-embedding_model = SentenceTransformer(
-    "BAAI/bge-small-en-v1.5"
-)
-
-
-# =========================================================
-# LangChain Ollama
-# =========================================================
-
-llm = ChatOllama(
-    model="qwen2.5:3b"
-)
+    vectorizer = TfidfVectorizer()
+    chunk_vectors = vectorizer.fit_transform(chunks)
+    llm = ChatOllama(
+        model="qwen2.5:0.5b",
+        temperature=0,
+        num_predict=120,
+    )
+    return chunks, vectorizer, chunk_vectors, llm
 
 
 # =========================================================
@@ -92,41 +104,72 @@ class ChatState(TypedDict):
 # =========================================================
 def retrieve(state: ChatState):
 
+    chunks, vectorizer, chunk_vectors, _ = get_chat_services()
     question = state["messages"][-1].content
 
-    query_embedding = embedding_model.encode(
-        question
-    ).tolist()
-
-    results = index.query(
-        vector=query_embedding,
-        top_k=3,
-        include_metadata=True
+    question_vector = vectorizer.transform([question])
+    scores = cosine_similarity(question_vector, chunk_vectors).ravel()
+    best_matches = scores.argsort()[-3:][::-1]
+    context = "\n\n".join(
+        chunks[index]
+        for index in best_matches
+        if scores[index] > 0
     )
-
-    context = ""
-
-    for match in results["matches"]:
-        context += (
-            match["metadata"]["text"]
-            + "\n\n"
-        )
 
     return {
         "context": context
     }
+
+
+def normalize_faq_line(text: str) -> str:
+    return " ".join(text.casefold().split()).rstrip("?.!")
+
 
 # =========================================================
 # Node 2: Generate
 # =========================================================
 def generate(state: ChatState):
 
+    _, _, _, llm = get_chat_services()
     context = state["context"]
+    question = state["messages"][-1].content
+    if not context:
+        return {
+            "answer": "I don't have that information in my knowledge base.",
+            "messages": [
+                AIMessage(
+                    content="I don't have that information in my knowledge base."
+                )
+            ],
+        }
+
+    context_lines = [line.strip() for line in context.splitlines()]
+    normalized_question = normalize_faq_line(question)
+    for line_index, line in enumerate(context_lines):
+        if normalize_faq_line(line) != normalized_question:
+            continue
+        answer = next(
+            (
+                answer_line
+                for answer_line in context_lines[line_index + 1:]
+                if answer_line and not answer_line.endswith("?")
+            ),
+            None,
+        )
+        if answer:
+            return {
+                "answer": answer,
+                "messages": [AIMessage(content=answer)],
+            }
 
     system_prompt = """
 You are Meer Abdullah Mughal's official AI Assistant.
 
 Your purpose is to answer questions about Meer Abdullah Mughal using ONLY the information provided in the retrieved context.
+
+Answer the user's question directly in at most two short sentences. Do not add
+definitions, general advice, or facts that are not explicitly in the context.
+If the context contains a direct answer, repeat only the relevant details.
 
 You can answer questions about:
 - Education
@@ -270,8 +313,5 @@ def chat(request: ChatRequest):
 # =========================================================
 
 @app.get("/")
-def home():
-
-    return {
-        "message": "Meer Abdullah Mughal Portfolio Chatbot API is running..."
-    }
+def home() -> FileResponse:
+    return FileResponse(Path(__file__).with_name("index.html"))
